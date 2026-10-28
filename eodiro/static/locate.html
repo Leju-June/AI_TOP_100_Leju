@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>어디로 · 내 위치 보내기</title>
+<style>
+  :root { --bg:#fff; --fg:#191919; --sub:#6b6b6b; --accent:#fee500; --err:#d93025; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#1e1e1e; --fg:#f2f2f2; --sub:#a0a0a0; } }
+  body { margin:0; background:var(--bg); color:var(--fg); font-family:-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif; }
+  main { max-width:420px; margin:0 auto; padding:48px 20px; text-align:center; }
+  h1 { font-size:22px; margin:0 0 8px; }
+  p { color:var(--sub); line-height:1.5; margin:0 0 28px; }
+  button { width:100%; padding:16px; border:0; border-radius:12px; background:var(--accent); color:#191919;
+           font-size:17px; font-weight:700; cursor:pointer; }
+  button:disabled { opacity:.5; }
+  #status { margin-top:24px; font-size:16px; min-height:24px; }
+  .err { color:var(--err); }
+</style>
+</head>
+<body>
+<main>
+  <h1>🧭 어디로</h1>
+  <p>버튼을 누르고 위치 권한을 허용하면<br>현재 위치를 채팅방 결과에만 사용해요.</p>
+  <button id="send">📍 내 위치 보내기</button>
+  <div id="status"></div>
+</main>
+<script>
+  const q = new URLSearchParams(location.search);
+  const btn = document.getElementById("send");
+  const status = document.getElementById("status");
+
+  function show(text, isErr) {
+    status.textContent = text;
+    status.className = isErr ? "err" : "";
+  }
+
+  if (!q.get("req")) { btn.disabled = true; show("잘못된 링크예요. 채팅방에서 다시 불러주세요.", true); }
+
+  btn.addEventListener("click", () => {
+    if (!navigator.geolocation) { show("이 브라우저는 위치 기능을 지원하지 않아요.", true); return; }
+    btn.disabled = true;
+    show("위치를 확인하는 중…");
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      show("경로를 찾는 중…");
+      try {
+        const res = await fetch("/api/location", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            req: q.get("req"),
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            botUserKey: q.get("botUserKey") || "",
+          }),
+        });
+        const data = await res.json();
+        show(data.ok ? "✅ " + data.message + " 채팅방을 확인하세요." : data.message, !data.ok);
+        if (!data.ok && res.status >= 500) btn.disabled = false;
+      } catch (e) {
+        show("서버에 연결하지 못했어요. 다시 시도해주세요.", true);
+        btn.disabled = false;
+      }
+    }, (err) => {
+      const msg = err.code === 1 ? "위치 권한이 거부됐어요. 설정에서 허용한 뒤 다시 눌러주세요."
+                                 : "위치를 가져오지 못했어요. 다시 시도해주세요.";
+      show(msg, true);
+      btn.disabled = false;
+    }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 });
+  });
+</script>
+</body>
+</html>
