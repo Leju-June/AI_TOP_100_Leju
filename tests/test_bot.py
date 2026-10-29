@@ -26,6 +26,10 @@ class FakeMaps:
             "미금역": [MIGEUM],
             "국밥집": [place("r1", "국밥집")],
             "김밥": [place("r2", "김밥천국 영통점", "음식점 > 분식"), place("r3", "고봉민김밥 영통점", "음식점 > 분식")],
+            "강남역": [place("p-gangnam", "강남역 2호선", "교통,수송 > 지하철역", 127.0276, 37.4979)],
+            "판교역": [place("p-pangyo", "판교역 신분당선", "교통,수송 > 지하철역", 127.1112, 37.3948)],
+            "홍대": [place("p-hongik", "홍익대학교 서울캠퍼스", "교육 > 대학교", 126.9250, 37.5511),
+                   place("p-hongdae", "홍대입구역 2호선", "교통,수송 > 지하철역", 126.9246, 37.5571)],
         }
 
     async def search_keyword(self, query, *, category=None, near=None, size=5):
@@ -35,12 +39,13 @@ class FakeMaps:
         return [place("n1", "근처식당", dist=120), place("n2", "근처식당2", dist=300)]
 
     async def transit_route(self, start, end):
-        def route(rtype, time, guidance):
+        def route(rtype, time, guidance, walk):
             return {"properties": {"type": rtype, "totalDistance": 15000, "totalTime": time, "transfers": 0},
-                    "steps": [{"properties": {"type": rtype, "guidance": guidance}}]}
+                    "steps": [{"properties": {"type": "WALKING", "distance": walk}},
+                              {"properties": {"type": rtype, "guidance": guidance}}]}
         return {"status": "OK", "routes": [
-            route("SUBWAY", 1500, "수인분당선 (영통 > 미금)"),
-            route("BUS", 2400, "직행 5000 (영통역 > 미금역)"),
+            route("SUBWAY", 1500, "수인분당선 (영통 > 미금)", 600),
+            route("BUS", 2400, "직행 5000 (영통역 > 미금역)", 200),
         ]}
 
     async def walk_route(self, start, end):

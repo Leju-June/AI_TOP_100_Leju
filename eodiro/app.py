@@ -12,10 +12,12 @@ from fastapi import BackgroundTasks, FastAPI, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
-from .config import Config, load_config
+from .agent import Agent
+from .config import Config, load_config, now_kst
 from .handlers import Bot, LocationError, Message
 from .kakao_bot import KakaoBotClient
 from .kakao_map import KakaoMapClient, Point
+from .llm import LLMClient
 from .store import Store
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -33,14 +35,16 @@ class LocationBody(BaseModel):
 
 
 def create_app(cfg: Config | None = None, http: httpx.AsyncClient | None = None,
-               store: Store | None = None) -> FastAPI:
+               store: Store | None = None, llm: LLMClient | None = None) -> FastAPI:
     cfg = cfg or load_config()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         client = http or httpx.AsyncClient(timeout=10)
-        app.state.bot = Bot(store or Store(cfg.db_path), KakaoMapClient(cfg.kakao_rest_api_key, client),
-                            cfg.public_base_url, cfg.location_request_ttl_sec)
+        db = store or Store(cfg.db_path)
+        maps = KakaoMapClient(cfg.kakao_rest_api_key, client)
+        app.state.bot = Bot(db, maps, cfg.public_base_url, cfg.location_request_ttl_sec, now_kst,
+                            agent=Agent.from_config(cfg, db, maps, now_kst, llm))
         app.state.kakao = KakaoBotClient(cfg.bot_token, client)
         yield
         if http is None:

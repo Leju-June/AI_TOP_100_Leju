@@ -1,4 +1,4 @@
-"""SQLite 저장소: 방별 맛집 목록, 위치 요청, 장소 캐시, 최근 추천 기록.
+"""SQLite 저장소: 방별 맛집 목록, 위치 요청, 장소 캐시, 최근 추천 기록, 대기 상태, 대화 기록.
 
 카카오 장소 API 응답의 저장·재사용에는 정책 제한이 있을 수 있어 표시에 필요한 최소 필드만 보관한다.
 """
@@ -41,6 +41,19 @@ CREATE TABLE IF NOT EXISTS recent_picks (
     place_id  TEXT NOT NULL,
     picked_at REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS pending (
+    group_key  TEXT PRIMARY KEY,
+    kind       TEXT NOT NULL,
+    user_key   TEXT,
+    data       TEXT NOT NULL,
+    created_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS history (
+    group_key TEXT NOT NULL,
+    role      TEXT NOT NULL,
+    text      TEXT NOT NULL,
+    at        REAL NOT NULL
+);
 """
 
 
@@ -54,6 +67,15 @@ class LocationRequest:
     is_channel: bool
     created_at: float
     used: bool
+
+
+@dataclass
+class Pending:
+    group_key: str
+    kind: str
+    user_key: str
+    data: dict
+    created_at: float
 
 
 class Store:
@@ -126,3 +148,30 @@ class Store:
         rows = self._exec("SELECT place_id FROM recent_picks WHERE group_key=? ORDER BY picked_at DESC LIMIT ?",
                           (group_key, limit))
         return [r[0] for r in rows]
+
+    # 방별 대기 상태 (후보 선택·되묻기·삭제 확인). 방마다 하나만 두고 새 대기가 이전 것을 덮어쓴다.
+    def set_pending(self, group_key: str, kind: str, user_key: str, data: dict, created_at: float) -> None:
+        self._exec("INSERT OR REPLACE INTO pending VALUES (?,?,?,?,?)",
+                   (group_key, kind, user_key, json.dumps(data, ensure_ascii=False), created_at))
+
+    def get_pending(self, group_key: str) -> Pending | None:
+        rows = self._exec("SELECT kind, user_key, data, created_at FROM pending WHERE group_key=?", (group_key,))
+        if not rows:
+            return None
+        r = rows[0]
+        return Pending(group_key, r[0], r[1] or "", json.loads(r[2]), r[3])
+
+    def clear_pending(self, group_key: str) -> None:
+        self._exec("DELETE FROM pending WHERE group_key=?", (group_key,))
+
+    # 방별 대화 기록 (봇을 부른 메시지와 봇 답장만, 최근 것만 남긴다)
+    def add_history(self, group_key: str, role: str, text: str, keep: int = 20) -> None:
+        self._exec("INSERT INTO history VALUES (?,?,?,?)", (group_key, role, text, time.time()))
+        self._exec("DELETE FROM history WHERE group_key=? AND rowid NOT IN "
+                   "(SELECT rowid FROM history WHERE group_key=? ORDER BY rowid DESC LIMIT ?)",
+                   (group_key, group_key, keep))
+
+    def recent_history(self, group_key: str, limit: int) -> list[tuple[str, str]]:
+        rows = self._exec("SELECT role, text FROM history WHERE group_key=? ORDER BY rowid DESC LIMIT ?",
+                          (group_key, limit))
+        return [(r[0], r[1]) for r in reversed(rows)]

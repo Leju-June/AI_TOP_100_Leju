@@ -9,5 +9,8 @@ websockets>=15.0
 fastapi>=0.115
 uvicorn>=0.30
 
+# 에이전트 (Claude API)
+anthropic>=2.3
+
 # 테스트
 pytest>=8.0

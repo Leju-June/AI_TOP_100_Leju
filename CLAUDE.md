@@ -33,14 +33,18 @@
 
 ### 코드 구조 (`eodiro/`)
 - `app.py` — FastAPI: `POST /webhook`(1초 내 204, 처리는 백그라운드), `GET /locate`, `POST /api/location`
-- `handlers.py` — `Bot`: 명령 → SkillResponse. 위치 요청 생성/완료. 전송 방식과 분리돼 있어 CLI·테스트에서 재사용
-- `commands.py` — `@어디로 ...` 파서 (Route/AddRestaurant/RemoveRestaurant/ListRestaurants/Recommend/Help)
+- `handlers.py` — `Bot`: 메시지 → SkillResponse. 대기 상태(후보 선택·되묻기·삭제 확인) → 버튼 문장은 파서로 바로 → 나머지는 에이전트(실패 시 파서). 위치 요청 생성/완료. 전송 방식과 분리돼 있어 CLI·테스트에서 재사용
+- `agent.py` — 에이전트 루프: 첫 호출은 빠른 모델, 도구 결과 뒤는 기본 모델. 위치·선택이 필요하면 대화 상태를 저장하고 멈췄다가 답이 오면 tool_result 로 이어 붙여 재개
+- `tools.py` — 에이전트 도구 8개(search_place, get_route, request_location, ask_user, list/add/remove_restaurant, recommend_restaurant). 결과는 LLM용 JSON, 카드는 답장에 붙임
+- `llm.py` — `LLMClient` 인터페이스와 Claude API 구현(`AnthropicLLM`, 서버 측 fallback 사용). 테스트는 가짜 LLM
+- `commands.py` — `@어디로 ...` 파서 (Route/AddRestaurant/RemoveRestaurant/ListRestaurants/Recommend/Help). 에이전트의 빠른 경로·대체 경로
 - `route_service.py` — 경로 계산(대중교통 수단 필터·도보·자동차)과 답장 카드
 - `food_service.py` — 맛집 목록/추천 카드, `pick_restaurant()`(추천 알고리즘 자리)
 - `kakao_bot.py`, `kakao_map.py` — API 클라이언트와 말풍선 빌더 / `store.py` — SQLite
 - `register_commands.py` — 멘션 시 뜨는 추천 명령어 등록(`COMMANDS` 목록, 전체 덮어쓰기) / `--show` 조회
-- `cli.py` — 카카오톡 없이 시험: `.venv/Scripts/python.exe -m eodiro.cli "@어디로 미금역" --lat .. --lng ..`
-- 테스트: `.venv/Scripts/python.exe -m pytest` (가짜 지도 클라이언트·MockTransport 사용, 네트워크 불필요)
+- `cli.py` — 카카오톡 없이 시험: `.venv/Scripts/python.exe -m eodiro.cli "@어디로 미금역 얼마나 남았어?" --lat .. --lng ..` (`--no-agent`면 파서만)
+- 테스트: `.venv/Scripts/python.exe -m pytest` (가짜 지도 클라이언트·가짜 LLM·MockTransport 사용, 네트워크 불필요). `tests/test_agent.py`가 계획서 시나리오 9개
+- 에이전트 설정: `.env`의 `ANTHROPIC_API_KEY`, `AGENT_MODEL`(기본 claude-sonnet-5-5), `AGENT_FAST_MODEL`(기본 claude-haiku-5-5), `AGENT_EFFORT`(기본 low), `AGENT_ENABLED`
 
 ## 외부 참고 자료
 - **500+ AI Agent Projects** — https://github.com/ashishpatel26/500-AI-Agents-Projects

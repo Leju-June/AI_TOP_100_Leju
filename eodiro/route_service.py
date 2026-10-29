@@ -26,6 +26,7 @@ class RouteResult:
     link: str
     steps: list[str] = field(default_factory=list)
     note: str = ""
+    walk_m: int | None = None  # 대중교통 경로 중 도보 구간 합계
 
 
 class RouteNotFound(Exception):
@@ -43,6 +44,11 @@ def pick_transit_route(routes: list[dict], mode: Mode) -> tuple[dict, str]:
     return routes[0], note
 
 
+def walk_distance(route: dict) -> int:
+    return sum(s["properties"].get("distance", 0) for s in route.get("steps", [])
+               if s["properties"]["type"] == "WALKING")
+
+
 def summarize_steps(route: dict) -> list[str]:
     lines = []
     for step in route.get("steps", []):
@@ -52,15 +58,20 @@ def summarize_steps(route: dict) -> list[str]:
     return lines
 
 
-async def find_route(client: KakaoMapClient, origin: Point, dest: Place, mode: Mode) -> RouteResult:
+async def find_route(client: KakaoMapClient, origin: Point, dest: Place, mode: Mode,
+                     less_walking: bool = False) -> RouteResult:
     if mode in (Mode.TRANSIT, Mode.BUS, Mode.SUBWAY):
         data = await client.transit_route(origin, dest.point)
         if data.get("status") == "OK" and data.get("routes"):
             route, note = pick_transit_route(data["routes"], mode)
+            if less_walking:
+                fewest = min(data["routes"], key=walk_distance)
+                if walk_distance(fewest) < walk_distance(route):
+                    route, note = fewest, "걷는 거리가 가장 짧은 경로로 안내해요."
             p = route["properties"]
             return RouteResult(mode, p["totalDistance"], p["totalTime"],
                                map_link("traffic", ORIGIN_NAME, origin, dest.name, dest.point),
-                               summarize_steps(route), note)
+                               summarize_steps(route), note, walk_distance(route))
         # 너무 가깝거나 대중교통 경로가 없으면 도보로 대체
         result = await find_route(client, origin, dest, Mode.WALK)
         result.note = "대중교통 경로가 없어 도보 경로로 안내해요."

@@ -9,7 +9,8 @@ from eodiro.config import Config
 from eodiro.store import Store
 
 CFG = Config(bot_token="bot", kakao_rest_api_key="rest", public_base_url="https://eodiro.test",
-             webhook_header_name="X-Eodiro", webhook_header_value="secret", port=0, db_path=None)
+             webhook_header_name="X-Eodiro", webhook_header_value="secret", port=0, db_path=None,
+             agent_enabled=False)
 
 
 def make_client():
